@@ -10,7 +10,7 @@ import {
   DialogTitle,
   DialogTrigger
 } from '@/components/ui/dialog/index.js'
-import { CameraIcon, GithubLogoIcon, GlobeIcon, HomeIcon, InfoCircledIcon, LayersIcon,
+import { CameraIcon, EnvelopeClosedIcon, GithubLogoIcon, GlobeIcon, HomeIcon, InfoCircledIcon, LayersIcon,
   PersonIcon, UpdateIcon } from '@radix-icons/vue'
 import { computed, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
@@ -30,18 +30,19 @@ const auth = useAuthStore()
 
 const infoOpen = ref(false);
 const loginOpen = ref(false);
+const emailLoginOpen = ref(false)
 const email = ref('')
 const password = ref('')
 const authError = ref('')
-const loginForm = ref<HTMLFormElement | null>(null)
+const signingUp = ref(false)
 
-const submitPassword = async (action: 'login' | 'signup') => {
+const submitPassword = async () => {
   authError.value = ''
   try {
-    if (action === 'login') {
-      await auth.loginWithPassword(email.value, password.value)
-    } else {
+    if (signingUp.value) {
       await auth.signUp(email.value, password.value)
+    } else {
+      await auth.loginWithPassword(email.value, password.value)
     }
   } catch (error) {
     authError.value = error.message
@@ -252,23 +253,30 @@ const handleImport = (event) => {
 
           <Button variant="destructive" type="button" @click="auth.logout()">Logout</Button>
         </div>
-        <div v-else class="flex flex-col gap-4">
-          <form ref="loginForm" class="flex flex-col gap-3" @submit.prevent="submitPassword('login')">
-            <Label for="login-email">Email</Label>
-            <Input id="login-email" v-model="email" type="email" autocomplete="email" required />
-            <Label for="login-password">Password</Label>
-            <Input id="login-password" v-model="password" type="password" autocomplete="current-password" minlength="6" required />
-            <p v-show="authError" class="text-xs text-red-600">{{ authError }}</p>
-            <div class="grid grid-cols-2 gap-2">
-              <Button type="submit">Log in</Button>
-              <Button type="button" variant="secondary" @click="loginForm.reportValidity() && submitPassword('signup')">Sign up</Button>
-            </div>
-          </form>
-          <p class="text-center text-xs text-muted-foreground">or</p>
+        <div v-else-if="!emailLoginOpen" class="flex flex-col gap-3">
           <Button variant="outline" type="button" @click="auth.login('github')">
             <GithubLogoIcon class="mr-2 h-4 w-4" />
             Login with GitHub
           </Button>
+          <Button variant="outline" type="button" @click="emailLoginOpen = true">
+            <EnvelopeClosedIcon class="mr-2 h-4 w-4" />
+            Login with email
+          </Button>
+        </div>
+        <div v-else class="flex flex-col gap-4">
+          <form class="flex flex-col gap-3" @submit.prevent="submitPassword">
+            <Label for="login-email">Email</Label>
+            <Input id="login-email" v-model="email" type="email" autocomplete="email" required />
+            <Label for="login-password">Password</Label>
+            <Input id="login-password" v-model="password" type="password" :autocomplete="signingUp ? 'new-password' : 'current-password'" minlength="6" required />
+            <p v-show="authError" class="text-xs text-red-600">{{ authError }}</p>
+            <Button type="submit">{{ signingUp ? 'Sign up' : 'Log in' }}</Button>
+          </form>
+          <p class="text-center text-xs text-muted-foreground">
+            {{ signingUp ? 'Have an account?' : 'No account?' }}
+            <button type="button" class="underline hover:text-primary" @click="signingUp = !signingUp; authError = ''">{{ signingUp ? 'Log in' : 'Sign up' }}</button>
+          </p>
+          <button type="button" class="text-xs text-muted-foreground hover:text-primary" @click="emailLoginOpen = false">Back</button>
         </div>
       </div>
       <DialogFooter class="sm:justify-end">
