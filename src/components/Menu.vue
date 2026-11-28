@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/dialog/index.js'
 import { CameraIcon, EnvelopeClosedIcon, GithubLogoIcon, GlobeIcon, HomeIcon, InfoCircledIcon, LayersIcon,
   PersonIcon, UpdateIcon } from '@radix-icons/vue'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSubTrigger, DropdownMenuPortal, DropdownMenuSubContent, DropdownMenuSub } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
@@ -21,6 +21,7 @@ import { useRoute } from 'vue-router'
 import { useColorMode } from '@vueuse/core'
 import { useImportExport } from '@/composables/useImportExport'
 import { usePresetsStore } from '@/stores/presets'
+import Turnstile from '@/components/Turnstile.vue'
 const route = useRoute();
 const mode = useColorMode()
 const auth = useAuthStore()
@@ -32,19 +33,48 @@ const email = ref('')
 const password = ref('')
 const authError = ref('')
 const signingUp = ref(false)
+const resetSent = ref(false)
+const newPassword = ref('')
 
-const submitPassword = async () => {
+watch(() => auth.recoveringPassword, (recovering) => {
+  if (recovering) {
+    loginOpen.value = true
+  }
+})
+
+const authBusy = ref(false)
+const captchaToken = ref('')
+const turnstile = ref<InstanceType<typeof Turnstile> | null>(null)
+
+const runAuth = async (action: () => Promise<void>) => {
   authError.value = ''
+  authBusy.value = true
   try {
-    if (signingUp.value) {
-      await auth.signUp(email.value, password.value)
-    } else {
-      await auth.loginWithPassword(email.value, password.value)
-    }
+    await action()
   } catch (error) {
     authError.value = error.message
+  } finally {
+    authBusy.value = false
+    turnstile.value?.reset()
   }
 }
+
+const sendReset = () => {
+  if (!email.value) {
+    authError.value = 'Enter your email first'
+    return
+  }
+  return runAuth(async () => {
+    await auth.sendPasswordReset(email.value, captchaToken.value)
+    resetSent.value = true
+  })
+}
+
+const submitNewPassword = () => runAuth(() => auth.updatePassword(newPassword.value))
+
+const submitPassword = () => runAuth(() => signingUp.value
+  ? auth.signUp(email.value, password.value, captchaToken.value)
+  : auth.loginWithPassword(email.value, password.value, captchaToken.value))
 
 const { getPresetsForExport, importPresets } = useImportExport();
 const { firstVisit } = usePresetsStore();
@@ -245,7 +275,13 @@ const handleImport = (event) => {
         <DialogTitle>Profile</DialogTitle>
       </DialogHeader>
       <div class="flex space-x-2 flex-col pt-6">
-        <div v-if="auth.user" class="flex flex-col gap-4">
+        <form v-if="auth.recoveringPassword" class="flex flex-col gap-3" @submit.prevent="submitNewPassword">
+          <Label for="new-password">New password</Label>
+          <Input id="new-password" v-model="newPassword" type="password" autocomplete="new-password" minlength="6" required />
+          <p v-show="authError" class="text-xs text-red-600">{{ authError }}</p>
+          <Button type="submit" :disabled="authBusy">{{ authBusy ? 'Saving…' : 'Set password' }}</Button>
+        </form>
+        <div v-else-if="auth.user" class="flex flex-col gap-4">
           <p>Logged in as <Badge variant="secondary">{{auth.user.email}}</Badge> via <Badge variant="outline" class="capitalize">{{auth.user.app_metadata.provider}}</Badge></p>
 
           <Button variant="destructive" type="button" @click="auth.logout()">Logout</Button>
@@ -267,8 +303,11 @@ const handleImport = (event) => {
             <Label for="login-password">Password</Label>
             <Input id="login-password" v-model="password" type="password" :autocomplete="signingUp ? 'new-password' : 'current-password'" minlength="6" required />
             <p v-show="authError" class="text-xs text-red-600">{{ authError }}</p>
-            <Button type="submit">{{ signingUp ? 'Sign up' : 'Log in' }}</Button>
+            <p v-show="resetSent" class="text-xs text-muted-foreground">If that email has an account, a reset link is on its way.</p>
+            <Turnstile ref="turnstile" v-model="captchaToken" />
+            <Button type="submit" :disabled="authBusy || !captchaToken">{{ authBusy ? 'Please wait…' : signingUp ? 'Sign up' : 'Log in' }}</Button>
           </form>
+          <button v-if="!signingUp" type="button" class="text-xs text-muted-foreground underline hover:text-primary disabled:opacity-50" :disabled="authBusy || !captchaToken" @click="sendReset">Forgot password?</button>
           <p class="text-center text-xs text-muted-foreground">
             {{ signingUp ? 'Have an account?' : 'No account?' }}
             <button type="button" class="underline hover:text-primary" @click="signingUp = !signingUp; authError = ''">{{ signingUp ? 'Log in' : 'Sign up' }}</button>
