@@ -5,15 +5,13 @@ import useSupabase from '@/composables/useSupabase'
 export const useAuthStore = defineStore('auth', () => {
   const { supabase } = useSupabase()
   const user = ref(null)
+  const recoveringPassword = ref(false)
   let initialised = false
 
   async function init() {
     if (initialised) {
       return
     }
-
-    const { data } = await supabase.auth.getUser();
-    user.value = data.user ?? null;
 
     supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
@@ -22,7 +20,13 @@ export const useAuthStore = defineStore('auth', () => {
       if (event === 'SIGNED_IN') {
         user.value = session?.user ?? null
       }
+      if (event === 'PASSWORD_RECOVERY') {
+        recoveringPassword.value = true
+      }
     });
+
+    const { data } = await supabase.auth.getUser();
+    user.value = data.user ?? null;
 
     initialised = true;
   }
@@ -47,9 +51,24 @@ export const useAuthStore = defineStore('auth', () => {
     window.location.reload()
   }
 
+  async function sendPasswordReset(email: string) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin })
+    if (error) {
+      throw error
+    }
+  }
+
+  async function updatePassword(password: string) {
+    const { error } = await supabase.auth.updateUser({ password })
+    if (error) {
+      throw error
+    }
+    window.location.reload()
+  }
+
   async function logout() {
     await supabase.auth.signOut()
   }
 
-  return { user, init, login, loginWithPassword, signUp, logout }
+  return { user, recoveringPassword, init, login, loginWithPassword, signUp, sendPasswordReset, updatePassword, logout }
 })
