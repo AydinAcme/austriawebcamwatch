@@ -35,24 +35,24 @@ export const useAuthStore = defineStore('auth', () => {
     await supabase.auth.signInWithOAuth({ provider })
   }
 
-  async function loginWithPassword(email: string, password: string) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+  async function loginWithPassword(email: string, password: string, captchaToken: string) {
+    const { error } = await supabase.auth.signInWithPassword({ email, password, options: { captchaToken } })
     if (error) {
       throw error
     }
     window.location.reload()
   }
 
-  async function signUp(email: string, password: string) {
-    const { error } = await supabase.auth.signUp({ email, password })
+  async function signUp(email: string, password: string, captchaToken: string) {
+    const { error } = await supabase.auth.signUp({ email, password, options: { captchaToken } })
     if (error) {
       throw error
     }
     window.location.reload()
   }
 
-  async function sendPasswordReset(email: string) {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin })
+  async function sendPasswordReset(email: string, captchaToken: string) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin, captchaToken })
     if (error) {
       throw error
     }

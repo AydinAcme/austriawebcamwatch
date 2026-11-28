@@ -21,6 +21,7 @@ import { useRoute } from 'vue-router'
 import { useColorMode } from '@vueuse/core'
 import { useImportExport } from '@/composables/useImportExport'
 import { usePresetsStore } from '@/stores/presets'
+import Turnstile from '@/components/Turnstile.vue'
 const route = useRoute();
 const mode = useColorMode()
 const auth = useAuthStore()
@@ -42,6 +43,8 @@ watch(() => auth.recoveringPassword, (recovering) => {
 })
 
 const authBusy = ref(false)
+const captchaToken = ref('')
+const turnstile = ref<InstanceType<typeof Turnstile> | null>(null)
 
 const runAuth = async (action: () => Promise<void>) => {
   authError.value = ''
@@ -52,6 +55,7 @@ const runAuth = async (action: () => Promise<void>) => {
     authError.value = error.message
   } finally {
     authBusy.value = false
+    turnstile.value?.reset()
   }
 }
 
@@ -61,7 +65,7 @@ const sendReset = () => {
     return
   }
   return runAuth(async () => {
-    await auth.sendPasswordReset(email.value)
+    await auth.sendPasswordReset(email.value, captchaToken.value)
     resetSent.value = true
   })
 }
@@ -69,8 +73,8 @@ const sendReset = () => {
 const submitNewPassword = () => runAuth(() => auth.updatePassword(newPassword.value))
 
 const submitPassword = () => runAuth(() => signingUp.value
-  ? auth.signUp(email.value, password.value)
-  : auth.loginWithPassword(email.value, password.value))
+  ? auth.signUp(email.value, password.value, captchaToken.value)
+  : auth.loginWithPassword(email.value, password.value, captchaToken.value))
 
 const { getPresetsForExport, importPresets } = useImportExport();
 const { firstVisit } = usePresetsStore();
@@ -300,9 +304,10 @@ const handleImport = (event) => {
             <Input id="login-password" v-model="password" type="password" :autocomplete="signingUp ? 'new-password' : 'current-password'" minlength="6" required />
             <p v-show="authError" class="text-xs text-red-600">{{ authError }}</p>
             <p v-show="resetSent" class="text-xs text-muted-foreground">If that email has an account, a reset link is on its way.</p>
-            <Button type="submit" :disabled="authBusy">{{ authBusy ? 'Please wait…' : signingUp ? 'Sign up' : 'Log in' }}</Button>
+            <Turnstile ref="turnstile" v-model="captchaToken" />
+            <Button type="submit" :disabled="authBusy || !captchaToken">{{ authBusy ? 'Please wait…' : signingUp ? 'Sign up' : 'Log in' }}</Button>
           </form>
-          <button v-if="!signingUp" type="button" class="text-xs text-muted-foreground underline hover:text-primary disabled:opacity-50" :disabled="authBusy" @click="sendReset">Forgot password?</button>
+          <button v-if="!signingUp" type="button" class="text-xs text-muted-foreground underline hover:text-primary disabled:opacity-50" :disabled="authBusy || !captchaToken" @click="sendReset">Forgot password?</button>
           <p class="text-center text-xs text-muted-foreground">
             {{ signingUp ? 'Have an account?' : 'No account?' }}
             <button type="button" class="underline hover:text-primary" @click="signingUp = !signingUp; authError = ''">{{ signingUp ? 'Log in' : 'Sign up' }}</button>
